@@ -5,6 +5,7 @@
 #pragma once
 
 #include <Jolt/Core/StaticArray.h>
+#include <Jolt/Core/Array.h>
 #include <Jolt/Core/LockFreeHashMap.h>
 #include <Jolt/Physics/EPhysicsUpdateError.h>
 #include <Jolt/Physics/Body/BodyPair.h>
@@ -42,6 +43,20 @@ public:
 	/// @param inMaxBodyPairs Maximum amount of body pairs to process (anything else will fall through the world), this number should generally be much higher than the max amount of contact points as there will be lots of bodies close that are not actually touching
 	/// @param inMaxContactConstraints Maximum amount of contact constraints to process (anything else will fall through the world)
 	void						Init(uint inMaxBodyPairs, uint inMaxContactConstraints);
+
+	/// Optional stream of solved contact impulses for engine-side soft-body coupling.
+	void SetRecordAppliedContactImpulses(bool inEnabled) { mRecordAppliedContactImpulses = inEnabled; }
+	struct AppliedContactImpulse
+	{
+		uint32 body1ID = 0;
+		uint32 body2ID = 0;
+		uint32 subShapeID1 = 0;
+		uint32 subShapeID2 = 0;
+		Float3 contactPoint;
+		Float3 normal;
+		Float3 impulse;
+	};
+	void GetAppliedContactImpulses(Array<AppliedContactImpulse> &outImpulses) const;
 
 	/// Listener that is notified whenever a contact point between two bodies is added/updated/removed
 	void						SetContactListener(ContactListener *inListener)						{ mContactListener = inListener; }
@@ -475,6 +490,8 @@ private:
 		float					mInvInertiaScale2;
 		uint32					mCachedManifoldHandle;
 		uint32					mNumContactPoints;
+		uint32					mSubShapeID1 = 0;
+		uint32					mSubShapeID2 = 0;
 	};
 
 	/// Contact constraint class, used for solving penetrations
@@ -510,7 +527,7 @@ public:
 private:
 	/// Create a new contact constraint
 	template <EMotionType Type1, EMotionType Type2>
-	JPH_INLINE ContactConstraint<Type1, Type2> *CreateConstraint(bool &ioActivateAndLinkBodies, Body &inBody1, Body &inBody2, uint64 inSortKey, uint32 inCachedManifoldHandle, Vec3Arg inWorldSpaceNormal, const ContactSettings &inSettings, uint32 inNumContactPoints);
+	JPH_INLINE ContactConstraint<Type1, Type2> *CreateConstraint(bool &ioActivateAndLinkBodies, Body &inBody1, Body &inBody2, uint64 inSortKey, uint32 inCachedManifoldHandle, Vec3Arg inWorldSpaceNormal, const ContactSettings &inSettings, uint32 inNumContactPoints, uint32 inSubShapeID1, uint32 inSubShapeID2);
 
 	/// Internal helper function to add a contact constraint from the cache. Templated to the motion type to reduce the amount of branches and calculations.
 	template <EMotionType Type1, EMotionType Type2>
@@ -540,6 +557,9 @@ private:
 	template <EMotionType Type1, EMotionType Type2>
 	static void					sStoreAppliedImpulses(ContactConstraintBase &ioConstraint, ManifoldCache &inManifoldCache);
 
+	template <EMotionType Type1, EMotionType Type2>
+	static void					sAppendAppliedContactImpulses(const ContactConstraintBase &inConstraint, const ManifoldCache &inManifoldCache, Array<AppliedContactImpulse> &outImpulses);
+
 	/// Internal helper function to solve a single position constraint. Templated to the motion type to reduce the amount of branches and calculations.
 	template <EMotionType Type1, EMotionType Type2>
 	static bool					sSolvePositionConstraint(ContactConstraintBase &ioConstraint, Body &ioBody1, Body &ioBody2, const PhysicsSettings &inSettings, const ManifoldCache &inManifoldCache);
@@ -549,6 +569,7 @@ private:
 
 	/// Listener that is notified whenever a contact point between two bodies is added/updated/removed
 	ContactListener *			mContactListener = nullptr;
+	bool						mRecordAppliedContactImpulses = false;
 
 	/// Functions that are used to combine friction and restitution of 2 bodies
 	CombineFunction				mCombineFriction = [](const Body &inBody1, const SubShapeID &, const Body &inBody2, const SubShapeID &) { return Sqrt(inBody1.GetFriction() * inBody2.GetFriction()); };

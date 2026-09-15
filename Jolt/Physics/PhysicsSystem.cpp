@@ -175,6 +175,7 @@ void PhysicsSystem::GatherIslandStats()
 
 EPhysicsUpdateError PhysicsSystem::Update(float inDeltaTime, int inCollisionSteps, TempAllocator *inTempAllocator, JobSystem *inJobSystem)
 {
+	mAppliedContactImpulses.clear();
 	JPH_PROFILE_FUNCTION();
 
 	JPH_DET_LOG("PhysicsSystem::Update: dt: " << inDeltaTime << " steps: " << inCollisionSteps);
@@ -645,6 +646,9 @@ EPhysicsUpdateError PhysicsSystem::Update(float inDeltaTime, int inCollisionStep
 
 	// Clear the island builder
 	mIslandBuilder.ResetIslands(inTempAllocator);
+
+	// Preserve solved contact lambdas before the temporary constraint storage is recycled.
+	mContactManager.GetAppliedContactImpulses(mAppliedContactImpulses);
 
 	// Clear the contact manager
 	mContactManager.FinishConstraintBuffer();

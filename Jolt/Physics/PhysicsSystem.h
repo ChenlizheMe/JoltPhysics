@@ -64,6 +64,8 @@ public:
 
 	/// Listener that is notified whenever a contact point between two bodies is added/updated/removed.
 	/// You can't change contact listener during PhysicsSystem::Update but it can be changed at any other time.
+	void SetRecordAppliedContactImpulses(bool inEnabled) { mContactManager.SetRecordAppliedContactImpulses(inEnabled); }
+	const Array<ContactConstraintManager::AppliedContactImpulse> &GetAppliedContactImpulses() const { return mAppliedContactImpulses; }
 	void						SetContactListener(ContactListener *inListener)				{ mContactManager.SetContactListener(inListener); }
 	ContactListener *			GetContactListener() const									{ return mContactManager.GetContactListener(); }
 
@@ -371,6 +373,7 @@ private:
 
 	/// The contact manager resolves all contacts during a simulation step
 	ContactConstraintManager	mContactManager;
+	Array<ContactConstraintManager::AppliedContactImpulse> mAppliedContactImpulses;
 
 	/// All non-contact constraints
 	ConstraintManager			mConstraintManager;

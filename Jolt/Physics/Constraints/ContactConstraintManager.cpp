@@ -765,7 +765,7 @@ void ContactConstraintManager::PrepareConstraintBuffer(PhysicsUpdateContext *inC
 }
 
 template <EMotionType Type1, EMotionType Type2>
-JPH_INLINE ContactConstraintManager::ContactConstraint<Type1, Type2> *ContactConstraintManager::CreateConstraint(bool &ioActivateAndLinkBodies, Body &inBody1, Body &inBody2, uint64 inSortKey, uint32 inCachedManifoldHandle, Vec3Arg inWorldSpaceNormal, const ContactSettings &inSettings, uint32 inNumContactPoints)
+JPH_INLINE ContactConstraintManager::ContactConstraint<Type1, Type2> *ContactConstraintManager::CreateConstraint(bool &ioActivateAndLinkBodies, Body &inBody1, Body &inBody2, uint64 inSortKey, uint32 inCachedManifoldHandle, Vec3Arg inWorldSpaceNormal, const ContactSettings &inSettings, uint32 inNumContactPoints, uint32 inSubShapeID1, uint32 inSubShapeID2)
 {
 	// Calculate the size of this constraint
 	uint32 constraint_size = (uint32)AlignUp(sizeof(ContactConstraint<Type1, Type2>) + (inNumContactPoints - 1) * sizeof(WorldContactPoint<Type1, Type2>), alignof(ContactConstraint<Type1, Type2>));
@@ -828,6 +828,8 @@ JPH_INLINE ContactConstraintManager::ContactConstraint<Type1, Type2> *ContactCon
 	constraint->mInvInertiaScale2 = inSettings.mInvInertiaScale2;
 	constraint->mCachedManifoldHandle = inCachedManifoldHandle;
 	constraint->mNumContactPoints = inNumContactPoints;
+	constraint->mSubShapeID1 = inSubShapeID1;
+	constraint->mSubShapeID2 = inSubShapeID2;
 
 #ifdef JPH_TRACK_SIMULATION_STATS
 	// Track new contact constraints
@@ -918,7 +920,7 @@ void ContactConstraintManager::TemplatedGetContactsFromCache(ContactAllocator &i
 				|| (Type2 == EMotionType::Dynamic && settings.mInvMassScale2 != 0.0f)))
 		{
 			// Create a new constraint
-			ContactConstraint<Type1, Type2> *constraint = CreateConstraint<Type1, Type2>(link_bodies, inBody1, inBody2, input_hash, output_handle, world_space_normal, settings, output_cm->mNumContactPoints);
+			ContactConstraint<Type1, Type2> *constraint = CreateConstraint<Type1, Type2>(link_bodies, inBody1, inBody2, input_hash, output_handle, world_space_normal, settings, output_cm->mNumContactPoints, input_key.GetSubShapeID1().GetValue(), input_key.GetSubShapeID2().GetValue());
 			if (constraint == nullptr)
 			{
 				ioContactAllocator.mErrors |= EPhysicsUpdateError::ContactConstraintsFull;
@@ -1197,7 +1199,7 @@ void ContactConstraintManager::TemplatedAddContactConstraint(ContactAllocator &i
 			|| (Type2 == EMotionType::Dynamic && settings.mInvMassScale2 != 0.0f)))
 	{
 		// Create a new constraint
-		ContactConstraint<Type1, Type2> *constraint = CreateConstraint<Type1, Type2>(ioActivateAndLinkBodies, inBody1, inBody2, key_hash, new_manifold_handle, inManifold.mWorldSpaceNormal, settings, num_contact_points);
+		ContactConstraint<Type1, Type2> *constraint = CreateConstraint<Type1, Type2>(ioActivateAndLinkBodies, inBody1, inBody2, key_hash, new_manifold_handle, inManifold.mWorldSpaceNormal, settings, num_contact_points, inManifold.mSubShapeID1.GetValue(), inManifold.mSubShapeID2.GetValue());
 		if (constraint == nullptr)
 		{
 			ioContactAllocator.mErrors |= EPhysicsUpdateError::ContactConstraintsFull;
@@ -1874,6 +1876,70 @@ void ContactConstraintManager::StoreAppliedImpulses(const uint32 *inConstraintOf
 
 		// Dispatch to the correct templated form
 		table[(int)constraint.mBody1->GetMotionType()][(int)constraint.mBody2->GetMotionType()](constraint, *mWriteCache);
+	}
+}
+
+template <EMotionType Type1, EMotionType Type2>
+void ContactConstraintManager::sAppendAppliedContactImpulses(const ContactConstraintBase &inConstraint, const ManifoldCache &inManifoldCache, Array<AppliedContactImpulse> &outImpulses)
+{
+	const ContactConstraint<Type1, Type2> &constraint = static_cast<const ContactConstraint<Type1, Type2> &>(inConstraint);
+	const CachedManifold &cached_manifold = inManifoldCache.FromHandle(constraint.mCachedManifoldHandle)->GetValue();
+	Vec3 normal = constraint.GetWorldSpaceNormal();
+	Vec3 tangent1, tangent2;
+	constraint.GetTangents(tangent1, tangent2);
+
+	for (uint32 i = 0; i < constraint.mNumContactPoints; ++i)
+	{
+		const WorldContactPoint<Type1, Type2> &contact = constraint.mContactPoints[i];
+		const CachedContactPoint &cached = cached_manifold.mContactPoints[i];
+		Vec3 impulse = normal * contact.mNonPenetrationConstraint.GetTotalLambda();
+		impulse += tangent1 * constraint.mFrictionConstraint1.GetTotalLambda();
+		impulse += tangent2 * constraint.mFrictionConstraint2.GetTotalLambda();
+		RVec3 world_point = constraint.mBody1->GetCenterOfMassTransform() * Vec3::sLoadFloat3Unsafe(cached.mPosition1);
+
+		AppliedContactImpulse record;
+		record.body1ID = constraint.mBody1->GetID().GetIndexAndSequenceNumber();
+		record.body2ID = constraint.mBody2->GetID().GetIndexAndSequenceNumber();
+		record.subShapeID1 = constraint.mSubShapeID1;
+		record.subShapeID2 = constraint.mSubShapeID2;
+		Vec3(float(world_point.GetX()), float(world_point.GetY()), float(world_point.GetZ())).StoreFloat3(&record.contactPoint);
+		normal.StoreFloat3(&record.normal);
+		impulse.StoreFloat3(&record.impulse);
+		outImpulses.push_back(record);
+	}
+}
+
+void ContactConstraintManager::GetAppliedContactImpulses(Array<AppliedContactImpulse> &outImpulses) const
+{
+	outImpulses.clear();
+	if (!mRecordAppliedContactImpulses || mConstraints == nullptr || mWriteCache == nullptr)
+		return;
+
+	using DispatchFunc = void (*)(const ContactConstraintBase &, const ManifoldCache &, Array<AppliedContactImpulse> &);
+	static const DispatchFunc table[3][3] = {
+		{
+			nullptr,
+			nullptr,
+			sAppendAppliedContactImpulses<EMotionType::Static, EMotionType::Dynamic>
+		},
+		{
+			nullptr,
+			nullptr,
+			sAppendAppliedContactImpulses<EMotionType::Kinematic, EMotionType::Dynamic>
+		},
+		{
+			sAppendAppliedContactImpulses<EMotionType::Dynamic, EMotionType::Static>,
+			sAppendAppliedContactImpulses<EMotionType::Dynamic, EMotionType::Kinematic>,
+			sAppendAppliedContactImpulses<EMotionType::Dynamic, EMotionType::Dynamic>
+		}
+	};
+
+	for (uint32 constraint_index = 0; constraint_index < GetNumConstraints(); ++constraint_index)
+	{
+		const ContactConstraintBase &constraint = *reinterpret_cast<const ContactConstraintBase *>(mConstraints + mConstraintIdxToOffset[constraint_index]);
+		DispatchFunc dispatch = table[(int)constraint.mBody1->GetMotionType()][(int)constraint.mBody2->GetMotionType()];
+		if (dispatch != nullptr)
+			dispatch(constraint, *mWriteCache, outImpulses);
 	}
 }
 
