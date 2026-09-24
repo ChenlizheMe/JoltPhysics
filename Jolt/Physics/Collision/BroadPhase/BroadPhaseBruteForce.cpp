@@ -88,6 +88,11 @@ void BroadPhaseBruteForce::NotifyBodiesLayerChanged(BodyID * ioBodies, int inNum
 void BroadPhaseBruteForce::CastRay(const RayCast &inRay, RayCastBodyCollector &ioCollector, const BroadPhaseLayerFilter &inBroadPhaseLayerFilter, const ObjectLayerFilter &inObjectLayerFilter) const
 {
 	shared_lock lock(mMutex);
+	CastRayNoLock(inRay, ioCollector, inBroadPhaseLayerFilter, inObjectLayerFilter);
+}
+
+void BroadPhaseBruteForce::CastRayNoLock(const RayCast &inRay, RayCastBodyCollector &ioCollector, const BroadPhaseLayerFilter &inBroadPhaseLayerFilter, const ObjectLayerFilter &inObjectLayerFilter) const
+{
 
 	// Load ray
 	Vec3 origin(inRay.mOrigin);

@@ -425,6 +425,12 @@ void BroadPhaseQuadTree::CastRay(const RayCast &inRay, RayCastBodyCollector &ioC
 
 	// Prevent this from running in parallel with node deletion in FrameSync(), see notes there
 	shared_lock lock(mQueryLocks[mQueryLockIdx]);
+	CastRayNoLock(inRay, ioCollector, inBroadPhaseLayerFilter, inObjectLayerFilter);
+}
+
+void BroadPhaseQuadTree::CastRayNoLock(const RayCast &inRay, RayCastBodyCollector &ioCollector, const BroadPhaseLayerFilter &inBroadPhaseLayerFilter, const ObjectLayerFilter &inObjectLayerFilter) const
+{
+	JPH_ASSERT(mMaxBodies == mBodyManager->GetMaxBodies());
 
 	// Loop over all layers and test the ones that could hit
 	for (BroadPhaseLayer::Type l = 0; l < mNumLayers; ++l)

@@ -695,12 +695,23 @@ void MeshShape::Draw(DebugRenderer *inRenderer, RMat44Arg inCenterOfMassTransfor
 
 bool MeshShape::CastRay(const RayCast &inRay, const SubShapeIDCreator &inSubShapeIDCreator, RayCastResult &ioHit) const
 {
+	return CastRayInternal(inRay, inSubShapeIDCreator, ioHit, false);
+}
+
+bool MeshShape::CastRayIgnoreBackFaces(const RayCast &inRay, const SubShapeIDCreator &inSubShapeIDCreator, RayCastResult &ioHit) const
+{
+	return CastRayInternal(inRay, inSubShapeIDCreator, ioHit, true);
+}
+
+bool MeshShape::CastRayInternal(const RayCast &inRay, const SubShapeIDCreator &inSubShapeIDCreator, RayCastResult &ioHit, bool inIgnoreBackFaces) const
+{
 	JPH_PROFILE_FUNCTION();
 
 	struct Visitor
 	{
-		JPH_INLINE explicit	Visitor(RayCastResult &ioHit) :
-			mHit(ioHit)
+		JPH_INLINE explicit	Visitor(RayCastResult &ioHit, bool inIgnoreBackFaces) :
+			mHit(ioHit),
+			mIgnoreBackFaces(inIgnoreBackFaces)
 		{
 		}
 
@@ -727,7 +738,7 @@ bool MeshShape::CastRay(const RayCast &inRay, const SubShapeIDCreator &inSubShap
 		{
 			// Test against triangles
 			uint32 triangle_idx;
-			float fraction = ioContext.TestRay(mRayOrigin, mRayDirection, inTriangles, inNumTriangles, mHit.mFraction, triangle_idx);
+			float fraction = ioContext.TestRay(mRayOrigin, mRayDirection, inTriangles, inNumTriangles, mHit.mFraction, triangle_idx, mIgnoreBackFaces);
 			if (fraction < mHit.mFraction)
 			{
 				mHit.mFraction = fraction;
@@ -743,10 +754,11 @@ bool MeshShape::CastRay(const RayCast &inRay, const SubShapeIDCreator &inSubShap
 		uint				mTriangleBlockIDBits;
 		SubShapeIDCreator	mSubShapeIDCreator;
 		bool				mReturnValue = false;
+		bool				mIgnoreBackFaces;
 		float				mDistanceStack[NodeCodec::StackSize];
 	};
 
-	Visitor visitor(ioHit);
+	Visitor visitor(ioHit, inIgnoreBackFaces);
 	visitor.mRayOrigin = inRay.mOrigin;
 	visitor.mRayDirection = inRay.mDirection;
 	visitor.mRayInvDirection.Set(inRay.mDirection);

@@ -128,6 +128,8 @@ public:
 
 	// See Shape::CastRay
 	virtual bool					CastRay(const RayCast &inRay, const SubShapeIDCreator &inSubShapeIDCreator, RayCastResult &ioHit) const override;
+	/// Packed closest cast using Jolt's portable Vec4 backend and one-sided triangle filtering.
+	bool						CastRayIgnoreBackFaces(const RayCast &inRay, const SubShapeIDCreator &inSubShapeIDCreator, RayCastResult &ioHit) const;
 	virtual void					CastRay(const RayCast &inRay, const RayCastSettings &inRayCastSettings, const SubShapeIDCreator &inSubShapeIDCreator, CastRayCollector &ioCollector, const ShapeFilter &inShapeFilter = { }) const override;
 
 	/// See: Shape::CollidePoint
@@ -175,6 +177,7 @@ protected:
 	virtual void					RestoreBinaryState(StreamIn &inStream) override;
 
 private:
+	bool						CastRayInternal(const RayCast &inRay, const SubShapeIDCreator &inSubShapeIDCreator, RayCastResult &ioHit, bool inIgnoreBackFaces) const;
 	struct							MSGetTrianglesContext;										///< Context class for GetTrianglesStart/Next
 
 	static constexpr int			NumTriangleBits = 3;										///< How many bits to reserve to encode the triangle index

@@ -121,6 +121,7 @@ public:
 
 	/// Access to the broadphase interface that allows coarse collision queries
 	const BroadPhaseQuery &		GetBroadPhaseQuery() const									{ return *mBroadPhase; }
+	const BroadPhase &			GetBroadPhaseNoLock() const									{ return *mBroadPhase; } ///< Version that does not lock the broadphase, use only while external publication is frozen.
 
 	/// Interface that allows fine collision queries against first the broad phase and then the narrow phase.
 	const NarrowPhaseQuery &	GetNarrowPhaseQuery() const									{ return mNarrowPhaseQueryLocking; }

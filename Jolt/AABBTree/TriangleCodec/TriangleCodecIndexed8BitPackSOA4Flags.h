@@ -425,7 +425,7 @@ public:
 		}
 
 		/// Tests a ray against the packed triangles
-		JPH_INLINE float			TestRay(Vec3Arg inRayOrigin, Vec3Arg inRayDirection, const void *inTriangleStart, uint32 inNumTriangles, float inClosest, uint32 &outClosestTriangleIndex) const
+		JPH_INLINE float			TestRay(Vec3Arg inRayOrigin, Vec3Arg inRayDirection, const void *inTriangleStart, uint32 inNumTriangles, float inClosest, uint32 &outClosestTriangleIndex, bool inIgnoreBackFaces = false) const
 		{
 			JPH_ASSERT(inNumTriangles > 0);
 			const TriangleBlockHeader *header = reinterpret_cast<const TriangleBlockHeader *>(inTriangleStart);
@@ -446,6 +446,21 @@ public:
 				// Perform ray vs triangle test
 				Vec4 distance = RayTriangle4(inRayOrigin, inRayDirection, v1x, v1y, v1z, v2x, v2y, v2z, v3x, v3y, v3z);
 
+				if (inIgnoreBackFaces)
+				{
+					// Use Jolt's portable Vec4 abstraction only. It maps to the
+					// selected x86, ARM/NEON or scalar backend at build time.
+					Vec4 e31x = v3x - v1x, e31y = v3y - v1y, e31z = v3z - v1z;
+					Vec4 e21x = v2x - v1x, e21y = v2y - v1y, e21z = v2z - v1z;
+					Vec4 nx = e31y * e21z - e31z * e21y;
+					Vec4 ny = e31z * e21x - e31x * e21z;
+					Vec4 nz = e31x * e21y - e31y * e21x;
+					Vec4 facing = nx * Vec4::sReplicate(inRayDirection.GetX())
+						+ ny * Vec4::sReplicate(inRayDirection.GetY())
+						+ nz * Vec4::sReplicate(inRayDirection.GetZ());
+					distance = Vec4::sSelect(distance, Vec4::sReplicate(FLT_MAX),
+									 Vec4::sLess(facing, Vec4::sZero()));
+				}
 				// Update closest with the smaller values
 				UVec4 smaller = Vec4::sLess(distance, closest);
 				closest = Vec4::sSelect(closest, distance, smaller);

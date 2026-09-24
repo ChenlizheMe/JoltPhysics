@@ -92,6 +92,9 @@ public:
 	/// @param ioPairCollector receives callbacks for every body pair found.
 	virtual void		FindCollidingPairs(BodyID *ioActiveBodies, int inNumActiveBodies, float inSpeculativeContactDistance, const ObjectVsBroadPhaseLayerFilter &inObjectVsBroadPhaseLayerFilter, const ObjectLayerPairFilter &inObjectLayerPairFilter, BodyPairCollector &ioPairCollector) const = 0;
 
+	/// Same as BroadPhaseQuery::CastRay but can be implemented in a way to take no broad phase locks.
+	virtual void		CastRayNoLock(const RayCast &inRay, RayCastBodyCollector &ioCollector, const BroadPhaseLayerFilter &inBroadPhaseLayerFilter, const ObjectLayerFilter &inObjectLayerFilter) const = 0;
+
 	/// Same as BroadPhaseQuery::CastAABox but can be implemented in a way to take no broad phase locks.
 	virtual void		CastAABoxNoLock(const AABoxCast &inBox, CastShapeBodyCollector &ioCollector, const BroadPhaseLayerFilter &inBroadPhaseLayerFilter, const ObjectLayerFilter &inObjectLayerFilter) const = 0;
 
